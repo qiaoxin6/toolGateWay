@@ -1,0 +1,76 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+logs/
+
+# Package files
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Database
+*.db
+*.sql
+*.sqlite
+
+# Configuration
+#application-local.properties
+#application-dev.properties
+#application-prod.properties
+#application-test.properties
+#*.env
+#.env
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+*.jks
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Spring Boot
+spring-shell.log
+
+# Micrometer/prometheus
+*.prom

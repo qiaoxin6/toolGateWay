@@ -1,0 +1,88 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: tool-gateway
+  threads:
+    virtual:
+      enabled: true    # Java 21 virtual threads
+  datasource:
+    url: jdbc:mysql://localhost:3306/toolgateway?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 123456
+  sql:
+    init:
+      mode: never   # 表已手动创建，不用 schema.sql
+
+# ── External Tools ────────────────────────────────────────────────
+# 支持 HTTP_SIDECAR（默认）和 MCP_NATIVE 两种类型。
+# 启动时根据 type 自动创建 HttpProxyToolHandler 或 McpClientToolHandler。
+gateway:
+  external-tools:
+    # HTTP Sidecar 工具
+    - name: python_search
+      description: Python 实现的语义搜索工具
+      url: http://localhost:8000/search
+      timeout: 30s
+      tags: [search, python]
+
+    - name: go_image_proc
+      description: Go 实现的图像处理工具
+      url: http://localhost:9090/process
+      timeout: 10s
+      tags: [image, go]
+
+    # MCP Client 工具 —— 网关作为 MCP Client 调外部 MCP Server
+    - name: mcp_example
+      type: MCP_NATIVE
+      description: 外部 MCP Server 上的示例工具
+      url: http://localhost:9000/mcp
+      remote-tool-name: external_search
+      timeout: 15s
+      tags: [mcp, external]
+
+# ── Resilience4j ─────────────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 200ms
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 30s
+
+# ── Actuator / Observability ─────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: tool-gateway
+
+# ── Logging ──────────────────────────────────────────────────────
+logging:
+  level:
+    com.toolgateway: DEBUG
+    io.github.resilience4j: INFO

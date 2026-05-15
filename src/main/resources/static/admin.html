@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tool Gateway Console</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/index.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+               background: #f0f2f5; }
+        .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                  color: #fff; padding: 16px 24px; display: flex; justify-content: space-between;
+                  align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+        .header h1 { font-size: 20px; font-weight: 600; }
+        .health-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .health-dot.up { background: #52c41a; box-shadow: 0 0 6px rgba(82,196,26,.6); }
+        .health-dot.down { background: #ff4d4f; box-shadow: 0 0 6px rgba(255,77,79,.6); }
+        .overview { display: flex; gap: 16px; padding: 20px 24px; flex-wrap: wrap; }
+        .overview .stat-card { flex: 1; min-width: 180px; background: #fff; border-radius: 8px;
+            padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .stat-card .number { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+        .stat-card .label { font-size: 13px; color: #666; margin-top: 4px; }
+        .stat-card.error .number { color: #ff4d4f; }
+        .stat-card.warn .number { color: #faad14; }
+        .main { padding: 0 24px 20px; }
+        .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px;
+                   flex-wrap: wrap; }
+        .toolbar .spacer { flex: 1; }
+        .toolbar .auto-label { color: #666; font-size: 13px; white-space: nowrap; }
+
+        /* ── Standard HTML table ── */
+        .table-wrap { overflow-x: auto; background: #fff; border-radius: 8px;
+                      box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        table.tool-table { width: 100%; border-collapse: collapse; font-size: 14px;
+                           min-width: 960px; }
+        table.tool-table thead { background: #fafafa; }
+        table.tool-table th { padding: 12px 10px; text-align: left; font-weight: 600;
+                              color: #333; border-bottom: 2px solid #e8e8e8;
+                              white-space: nowrap; }
+        table.tool-table th.c { text-align: center; }
+        table.tool-table td { padding: 10px; border-bottom: 1px solid #f0f0f0;
+                              color: #444; }
+        table.tool-table tr:hover td { background: #f5f7fa; }
+        table.tool-table td.empty { text-align: center; color: #999; padding: 40px; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px;
+               font-size: 12px; color: #fff; }
+        .tag.local { background: #909399; }
+        .tag.http  { background: #67c23a; }
+        .tag.grpc  { background: #e6a23c; }
+        .tag.subprocess { background: #409eff; }
+        .tag.mcp   { background: #f56c6c; }
+        .cb-open  { color: #ff4d4f; }
+        .cb-ok    { color: #52c41a; }
+        .no-target { color: #ccc; }
+        .link-btn { color: #409eff; cursor: pointer; background: none; border: none;
+                    font-size: 13px; padding: 2px 6px; }
+        .link-btn.danger { color: #ff4d4f; }
+        .link-btn:hover { opacity: .8; }
+
+        .detail-dl { display: grid; grid-template-columns: 100px 1fr; gap: 8px 12px; }
+        .detail-dl dt { color: #666; font-weight: 500; }
+        .charts { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-top: 20px; }
+        .chart-box { background: #fff; border-radius: 8px; padding: 16px;
+                     box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .chart-box h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #1a1a2e; }
+        .chart-inner { width: 100%; height: 280px; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="header">
+        <h1>Tool Gateway Console</h1>
+        <div>
+            <span class="health-dot" :class="status.health === 'UP' ? 'up' : 'down'"></span>
+            <span style="color:#fff; margin-left:6px;">
+                {{ status.health === 'UP' ? '系统正常' : '异常' }}
+            </span>
+        </div>
+    </div>
+
+    <!-- 概览卡片 -->
+    <div class="overview">
+        <div class="stat-card">
+            <div class="number">{{ status.totalTools }}</div>
+            <div class="label">已注册工具</div>
+        </div>
+        <div class="stat-card">
+            <div class="number">{{ fmtCount(status.totalCalls) }}</div>
+            <div class="label">累计调用次数</div>
+        </div>
+        <div class="stat-card" :class="{ error: status.errorRate > 0.05 }">
+            <div class="number">{{ (status.errorRate * 100).toFixed(1) }}%</div>
+            <div class="label">错误率</div>
+        </div>
+        <div class="stat-card" :class="{ warn: status.circuitBreakersOpen > 0 }">
+            <div class="number">{{ status.circuitBreakersOpen }}</div>
+            <div class="label">熔断器打开</div>
+        </div>
+    </div>
+
+    <div class="main">
+        <el-tabs v-model="activeTab">
+            <el-tab-pane label="工具管理" name="tools">
+
+                <!-- 工具栏 -->
+                <div class="toolbar">
+                    <el-input v-model="keyword" placeholder="搜索工具名称"
+                              style="width: 240px" clearable size="default" />
+                    <el-button type="primary" @click="showAddDialog = true">
+                        + 添加工具
+                    </el-button>
+                    <span class="spacer"></span>
+                    <span class="auto-label">自动刷新间隔</span>
+                    <el-input-number v-model="refreshInterval" :min="1" :max="300"
+                                     :step="1" size="default" style="width: 100px" />
+                    <span class="auto-label">秒</span>
+                    <el-button @click="fetchStatus" size="default">立即刷新</el-button>
+                </div>
+
+                <!-- 表格 —— 标准 HTML table，列宽稳定不会塌缩 -->
+                <div class="table-wrap">
+                <table class="tool-table">
+                    <colgroup>
+                        <col style="width:15%">
+                        <col style="width:11%">
+                        <col style="width:7%">
+                        <col style="width:17%">
+                        <col style="width:20%">
+                        <col style="width:9%">
+                        <col style="width:8%">
+                        <col style="width:13%">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>名称</th>
+                            <th>类型</th>
+                            <th>版本</th>
+                            <th>描述</th>
+                            <th>目标地址</th>
+                            <th class="c">熔断器</th>
+                            <th class="c">调用次数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-if="filteredTools.length === 0">
+                            <td colspan="8" class="empty">暂无已注册工具</td>
+                        </tr>
+                        <tr v-for="t in filteredTools" :key="t.name">
+                            <td><strong>{{ t.name }}</strong></td>
+                            <td><span :class="'tag ' + typeCss(t.runnerType)">{{ t.runnerType }}</span></td>
+                            <td>{{ t.version }}</td>
+                            <td :title="t.description">{{ ellipsis(t.description, 30) }}</td>
+                            <td :title="t.target">
+                                <span v-if="t.target">{{ ellipsis(t.target, 40) }}</span>
+                                <span v-else class="no-target">—</span>
+                            </td>
+                            <td class="c">
+                                <span :class="cbOpen(t) ? 'cb-open' : 'cb-ok'">
+                                    {{ cbOpen(t) ? '● 打开' : '● 正常' }}
+                                </span>
+                            </td>
+                            <td class="c">{{ t.stats?.callCount || 0 }}</td>
+                            <td>
+                                <button class="link-btn" @click="showDetail(t)">详情</button>
+                                <button v-if="isExternal(t)"
+                                        class="link-btn danger" @click="confirmDelete(t)">删除</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>
+
+                <!-- 图表 -->
+                <div class="charts">
+                    <div class="chart-box">
+                        <h3>各工具调用次数及错误分布</h3>
+                        <div class="chart-inner" ref="barChart"></div>
+                    </div>
+                    <div class="chart-box">
+                        <h3>平均响应时间 (ms)</h3>
+                        <div class="chart-inner" ref="latencyChart"></div>
+                    </div>
+                </div>
+            </el-tab-pane>
+        </el-tabs>
+    </div>
+
+    <!-- 添加工具对话框 -->
+    <el-dialog v-model="showAddDialog" title="添加外部工具" width="500px"
+               :close-on-click-modal="false">
+        <el-form :model="addForm" label-position="top">
+            <el-form-item label="工具类型" required>
+                <el-select v-model="addForm.type" style="width: 100%">
+                    <el-option label="HTTP Sidecar（HTTP 微服务）" value="HTTP_SIDECAR" />
+                    <el-option label="MCP Native（外部 MCP Server）" value="MCP_NATIVE" />
+                </el-select>
+            </el-form-item>
+            <el-form-item label="工具名称" required>
+                <el-input v-model="addForm.name" placeholder="如 python_search" />
+            </el-form-item>
+            <el-form-item label="描述">
+                <el-input v-model="addForm.description" placeholder="工具功能简述" />
+            </el-form-item>
+            <el-form-item label="Server URL" required>
+                <el-input v-model="addForm.url"
+                          :placeholder="addForm.type === 'MCP_NATIVE' ? 'http://mcp-server:9000/mcp' : 'http://localhost:8000/search'" />
+            </el-form-item>
+            <el-form-item v-if="addForm.type === 'MCP_NATIVE'" label="远端工具名" required>
+                <el-input v-model="addForm.remoteToolName"
+                          placeholder="外部 MCP Server 上注册的工具名" />
+            </el-form-item>
+            <el-form-item label="超时（毫秒）">
+                <el-input-number v-model="addForm.timeoutMs" :min="100" :max="300000"
+                                 :step="1000" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="标签（逗号分隔）">
+                <el-input v-model="addForm.tagsStr" placeholder="search, python" />
+            </el-form-item>
+        </el-form>
+        <template #footer>
+            <el-button @click="showAddDialog = false">取消</el-button>
+            <el-button type="primary" @click="addTool" :loading="addLoading">确定</el-button>
+        </template>
+    </el-dialog>
+
+    <!-- 工具详情对话框 -->
+    <el-dialog v-model="showDetailDialog" title="工具详情" width="500px">
+        <dl class="detail-dl" v-if="detailTool">
+            <dt>名称</dt><dd>{{ detailTool.name }}</dd>
+            <dt>版本</dt><dd>{{ detailTool.version }}</dd>
+            <dt>类型</dt><dd>{{ detailTool.runnerType }}</dd>
+            <dt>描述</dt><dd>{{ detailTool.description || '—' }}</dd>
+            <dt>目标</dt><dd>{{ detailTool.target || '—' }}</dd>
+            <dt>标签</dt><dd>{{ (detailTool.tags || []).join(', ') || '—' }}</dd>
+            <dt>熔断器</dt><dd>{{ cbStateText(detailTool) }}</dd>
+            <dt>调用次数</dt><dd>{{ detailTool.stats?.callCount || 0 }}</dd>
+            <dt>错误次数</dt><dd>{{ detailTool.stats?.errorCount || 0 }}</dd>
+            <dt>平均耗时</dt><dd>{{ detailTool.stats?.avgDurationMs || 0 }} ms</dd>
+        </dl>
+    </el-dialog>
+</div>
+
+<script>
+const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+
+createApp({
+    setup() {
+        const activeTab = ref('tools');
+        const loading = ref(false);
+        const keyword = ref('');
+        const refreshInterval = ref(10);
+        const showAddDialog = ref(false);
+        const showDetailDialog = ref(false);
+        const detailTool = ref(null);
+        const addLoading = ref(false);
+
+        const status = ref({
+            health: 'UP', totalTools: 0, totalCalls: 0, totalErrors: 0,
+            errorRate: 0, circuitBreakersOpen: 0, tools: []
+        });
+
+        const addForm = ref({
+            type: 'HTTP_SIDECAR', name: '', description: '', url: '',
+            remoteToolName: '', timeoutMs: 30000, tagsStr: ''
+        });
+
+        const filteredTools = computed(() => {
+            const kw = keyword.value.toLowerCase().trim();
+            if (!kw) return status.value.tools;
+            return status.value.tools.filter(t =>
+                t.name.toLowerCase().includes(kw) ||
+                (t.description || '').toLowerCase().includes(kw)
+            );
+        });
+
+        // ── API ─────────────────────────────────────────────────
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/admin/tools/status');
+                if (!res.ok) throw new Error(res.statusText);
+                status.value = await res.json();
+            } catch (e) {
+                console.error('fetch status failed', e);
+            }
+        }
+
+        async function addTool() {
+            const f = addForm.value;
+            if (!f.name || !f.url) {
+                ElementPlus.ElMessage.warning('名称和 URL 为必填项');
+                return;
+            }
+            if (f.type === 'MCP_NATIVE' && !f.remoteToolName) {
+                ElementPlus.ElMessage.warning('MCP 类型需要填写远端工具名');
+                return;
+            }
+            addLoading.value = true;
+            try {
+                const tags = f.tagsStr.split(',').map(t => t.trim()).filter(Boolean);
+                const body = {
+                    type: f.type,
+                    name: f.name,
+                    description: f.description,
+                    url: f.url,
+                    timeoutMs: f.timeoutMs,
+                    tags
+                };
+                if (f.type === 'MCP_NATIVE') {
+                    body.remoteToolName = f.remoteToolName;
+                }
+                const res = await fetch('/api/admin/tools', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    ElementPlus.ElMessage.success('工具添加成功');
+                    showAddDialog.value = false;
+                    addForm.value = { type: 'HTTP_SIDECAR', name: '',
+                        description: '', url: '', remoteToolName: '',
+                        timeoutMs: 30000, tagsStr: '' };
+                    await fetchStatus();
+                } else {
+                    ElementPlus.ElMessage.error(data.error_msg || '添加失败');
+                }
+            } catch (e) {
+                ElementPlus.ElMessage.error('请求失败: ' + e.message);
+            } finally {
+                addLoading.value = false;
+            }
+        }
+
+        function confirmDelete(tool) {
+            ElementPlus.ElMessageBox.confirm(
+                `确定删除 "${tool.name}"？此操作不可恢复。`,
+                '确认删除',
+                { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+            ).then(() => doDelete(tool.name)).catch(() => {});
+        }
+
+        async function doDelete(name) {
+            try {
+                const res = await fetch('/api/admin/tools/' + name, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    ElementPlus.ElMessage.success('已删除');
+                    await fetchStatus();
+                } else {
+                    ElementPlus.ElMessage.error(data.error_msg || '删除失败');
+                }
+            } catch (e) {
+                ElementPlus.ElMessage.error('请求失败');
+            }
+        }
+
+        function showDetail(tool) {
+            detailTool.value = tool;
+            showDetailDialog.value = true;
+        }
+
+        // ── Charts ──────────────────────────────────────────────
+
+        let barChart = null, latencyChart = null;
+
+        function renderCharts() {
+            const tools = status.value.tools;
+            if (tools.length === 0) return;
+
+            const dom1 = document.querySelector('[ref="barChart"]');
+            if (dom1) {
+                if (!barChart) barChart = echarts.init(dom1);
+                barChart.setOption({
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: ['调用次数','错误次数'], bottom: 0 },
+                    grid: { left: 50, right: 20, top: 20, bottom: 30 },
+                    xAxis: { type: 'category', data: tools.map(t => t.name),
+                             axisLabel: { rotate: 30, fontSize: 11 } },
+                    yAxis: { type: 'value' },
+                    series: [
+                        { name: '调用次数', type: 'bar',
+                          data: tools.map(t => t.stats?.callCount || 0),
+                          itemStyle: { color: '#409EFF' } },
+                        { name: '错误次数', type: 'bar',
+                          data: tools.map(t => t.stats?.errorCount || 0),
+                          itemStyle: { color: '#F56C6C' } }
+                    ]
+                });
+                barChart.resize();
+            }
+
+            const dom2 = document.querySelector('[ref="latencyChart"]');
+            if (dom2) {
+                if (!latencyChart) latencyChart = echarts.init(dom2);
+                latencyChart.setOption({
+                    tooltip: { trigger: 'axis' },
+                    grid: { left: 50, right: 20, top: 20, bottom: 30 },
+                    xAxis: { type: 'category', data: tools.map(t => t.name),
+                             axisLabel: { rotate: 30, fontSize: 11 } },
+                    yAxis: { type: 'value', name: 'ms' },
+                    series: [{ type: 'bar',
+                        data: tools.map(t => ({
+                            value: t.stats?.avgDurationMs || 0,
+                            itemStyle: { color: (t.stats?.avgDurationMs || 0) > 1000
+                                         ? '#F56C6C' : '#67C23A' }
+                        }))
+                    }]
+                });
+                latencyChart.resize();
+            }
+        }
+
+        // ── Polling ─────────────────────────────────────────────
+
+        let timer = null;
+
+        function startPolling() {
+            if (timer) clearInterval(timer);
+            timer = setInterval(async () => {
+                await fetchStatus();
+                nextTick(renderCharts);
+            }, refreshInterval.value * 1000);
+        }
+
+        watch(refreshInterval, () => startPolling());
+
+        // ── Helpers ────────────────────────────────────────────
+
+        function typeCss(type) {
+            const m = { LOCAL: 'local', HTTP_SIDECAR: 'http', GRPC_SIDECAR: 'grpc',
+                        SUBPROCESS: 'subprocess', MCP_NATIVE: 'mcp' };
+            return m[type] || 'local';
+        }
+
+        function ellipsis(str, max) {
+            if (!str) return '';
+            return str.length > max ? str.slice(0, max) + '…' : str;
+        }
+
+        function fmtCount(n) {
+            if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+            if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+            return String(n);
+        }
+
+        function cbOpen(tool) {
+            const s = tool.circuitBreaker?.state;
+            return s === 'OPEN' || s === 'FORCED_OPEN';
+        }
+
+        function isExternal(tool) {
+            return tool.runnerType === 'HTTP_SIDECAR'
+                || tool.runnerType === 'MCP_NATIVE';
+        }
+
+        function cbStateText(tool) {
+            const s = tool.circuitBreaker?.state;
+            if (s === 'CLOSED') return '● 正常';
+            if (s === 'OPEN') return '● 打开';
+            if (s === 'HALF_OPEN') return '◐ 半开';
+            return s || '—';
+        }
+
+        // ── Init ───────────────────────────────────────────────
+
+        onMounted(async () => {
+            loading.value = true;
+            await fetchStatus();
+            loading.value = false;
+            nextTick(renderCharts);
+            startPolling();
+        });
+
+        return {
+            activeTab, keyword, refreshInterval, loading,
+            showAddDialog, showDetailDialog, detailTool, addLoading,
+            status, addForm, filteredTools,
+            fetchStatus, addTool, confirmDelete, doDelete, showDetail,
+            typeCss, ellipsis, fmtCount, isExternal, cbOpen, cbStateText
+        };
+    }
+}).use(ElementPlus).mount('#app');
+</script>
+</body>
+</html>
