@@ -47,6 +47,10 @@ public class HttpAdapter implements ProtocolAdapter {
             context.put("tenant", headers.getOrDefault("x-tenant", "default"));
             context.put("caller", headers.getOrDefault("x-caller", "anonymous"));
             context.put("role", headers.getOrDefault("x-role", "anonymous"));
+            // 灰度路由
+            if (headers.containsKey("x-canary")) {
+                context.put("canary", headers.get("x-canary"));
+            }
 
             String traceId = headers.getOrDefault("x-trace-id", UUID.randomUUID().toString());
 

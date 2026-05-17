@@ -40,7 +40,27 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/admin.html)",
       "Bash(curl -s -X POST http://localhost:8080/api/admin/tools -H \"Content-Type: application/json\" -d '{\"name\":\"persist_test\",\"description\":\"persistence test\",\"url\":\"http://localhost:9999/test\",\"timeoutMs\":5000,\"tags\":[\"test\"]}')",
       "Bash(python3 -c \"import sys,json; tools=json.load\\(sys.stdin\\); [print\\(f'{t[\\\\\"name\\\\\"]}: source={t[\\\\\"extra\\\\\"].get\\(\\\\\"source\\\\\",\\\\\"?\\\\\"\\)}'\\) for t in tools]\")",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'health={d[\\\\\"health\\\\\"]} totalTools={d[\\\\\"totalTools\\\\\"]}'\\); [print\\(f'  {t[\\\\\"name\\\\\"]}: type={t[\\\\\"runnerType\\\\\"]}'\\) for t in d['tools']]\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'health={d[\\\\\"health\\\\\"]} totalTools={d[\\\\\"totalTools\\\\\"]}'\\); [print\\(f'  {t[\\\\\"name\\\\\"]}: type={t[\\\\\"runnerType\\\\\"]}'\\) for t in d['tools']]\")",
+      "Bash(curl -s -X PATCH http://localhost:8080/api/admin/tools/mysql_query -H \"Content-Type: application/json\" -d '{\"enabled\":false}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1\"}}')",
+      "Bash(curl -s -X PATCH http://localhost:8080/api/admin/tools/mysql_query -H \"Content-Type: application/json\" -d '{\"enabled\":true}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"wrong\":\"value\"}}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":123}}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/admin/tools -H \"Content-Type: application/json\" -d '{\"name\":\"mysql_query\",\"description\":\"canary version\",\"url\":\"http://localhost:9999/canary\",\"type\":\"HTTP_SIDECAR\",\"releaseChannel\":\"canary\",\"canaryWeight\":30,\"tags\":[\"canary\"]}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1\"},\"context\":{\"canary\":\"true\"}}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS stable\"}}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/admin/tools -H \"Content-Type: application/json\" -d '{\"name\":\"mysql_query\",\"description\":\"canary version\",\"url\":\"http://localhost:9999/canary\",\"type\":\"HTTP_SIDECAR\",\"releaseChannel\":\"canary\",\"canaryWeight\":50,\"tags\":[\"canary\"]}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS ver\"}}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); t=[x for x in d['tools'] if x['name']=='mysql_query'][0]; print\\(json.dumps\\(t['versions'],indent=2\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -H \"X-Canary: true\" -d '{\"params\":{\"sql\":\"SELECT 1\"}}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS stable_hit\"}}')",
+      "Bash(curl -s -X POST http://localhost:8080/mcp -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"tools/call\",\"params\":{\"name\":\"mysql_query\",\"arguments\":{\"sql\":\"SELECT 1\"},\"role\":\"admin\",\"canary\":\"true\"}}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/admin/tools -H \"Content-Type: application/json\" -d '{\"name\":\"mysql_query\",\"description\":\"canary\",\"url\":\"http://localhost:9999/canary\",\"type\":\"HTTP_SIDECAR\",\"releaseChannel\":\"canary\",\"canaryWeight\":50,\"tags\":[\"canary\"]}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/admin/tools -H \"Content-Type: application/json\" -d '{\"name\":\"mysql_query\",\"description\":\"canary\",\"url\":\"http://localhost:9999/canary\",\"type\":\"HTTP_SIDECAR\",\"releaseChannel\":\"canary\",\"canaryWeight\":0,\"tags\":[\"canary\"]}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS clean_test\"}}')",
+      "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS stable_only\"}}')",
+      "Bash(mvn generate-sources *)",
+      "Bash(python3 -c \"import sys,json; [print\\(f'{t[\\\\\"name\\\\\"]}: enabled={t[\\\\\"enabled\\\\\"]} healthy={t[\\\\\"healthy\\\\\"]}'\\) for t in json.load\\(sys.stdin\\)]\")"
     ]
   }
 }

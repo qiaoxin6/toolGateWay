@@ -45,7 +45,11 @@ public interface ToolRegistryMapper {
             "min_stable_weight, created_at, updated_at) " +
             "VALUES (#{name}, #{version}, #{description}, #{source}, #{runnerType}, #{target}, " +
             "#{timeoutMs}, #{tags}, #{extra}, #{enabled}, #{releaseChannel}, #{canaryWeight}, " +
-            "#{routeRule}, #{minStableWeight}, #{createdAt}, #{updatedAt})")
+            "#{routeRule}, #{minStableWeight}, #{createdAt}, #{updatedAt})" +
+            "ON DUPLICATE KEY UPDATE version=VALUES(version), description=VALUES(description)," +
+            "target=VALUES(target), timeout_ms=VALUES(timeout_ms), tags=VALUES(tags)," +
+            "extra=VALUES(extra), enabled=VALUES(enabled), canary_weight=VALUES(canary_weight)," +
+            "updated_at=VALUES(updated_at)")
     int insert(ToolRegistryEntity entity);
 
     @Update("UPDATE tool_registry SET version = #{version}, description = #{description}, " +

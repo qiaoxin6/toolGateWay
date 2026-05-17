@@ -20,4 +20,25 @@ public @interface Tool {
     RunnerType runnerType() default RunnerType.LOCAL;
     String target() default "";
     String[] tags() default {};
+
+    /** 发布通道：stable / canary / beta */
+    String releaseChannel() default "stable";
+
+    /** 灰度权重 0-100，stable 通道忽略 */
+    int canaryWeight() default 0;
+
+    /** 参数 Schema 列表 */
+    Param[] params() default {};
+
+    /**
+     * 单个参数定义。
+     */
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Param {
+        String name();
+        String type() default "string";   // string / number / boolean / array / object
+        String description() default "";
+        boolean required() default false;
+        String defaultValue() default "";
+    }
 }

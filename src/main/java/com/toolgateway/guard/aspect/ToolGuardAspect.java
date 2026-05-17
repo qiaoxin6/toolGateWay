@@ -25,6 +25,8 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.*;
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 
 @Aspect
 @Component
@@ -34,6 +36,7 @@ public class ToolGuardAspect {
 
     private final Map<String, CircuitBreaker> circuitBreakers = new ConcurrentHashMap<>();
     private final Map<String, Retry> retries = new ConcurrentHashMap<>();
+    private final Map<String, RateLimiter> rateLimiters = new ConcurrentHashMap<>();
 
     /**
      * 拦截所有带有 @ToolGuard 注解的类的公共方法，
@@ -57,8 +60,15 @@ public class ToolGuardAspect {
         if (guard.roles().length > 0 && !checkAuth(guard.roles(), pjp.getArgs())) {
             return ToolResponse.fail(ErrorCode.AUTH_DENIED.code, "Access denied: " + toolName);
         }
-
-        // ── ② Timeout + ③ Retry + ④ CircuitBreaker ─────────
+        // ── ② RateLimit ──────────────────────────────────────────
+        if(guard.rateLimit()>0){
+            RateLimiter rl = getOrCreateRateLimiter(toolName, guard);
+            if (!rl.acquirePermission()) {
+                return  ToolResponse.fail(ErrorCode.RATE_LIMITED.code, "rate limit exceeded: max "
+              + guard.rateLimit() + "/" + guard.rateLimitPeriodMs() + "ms");
+            }
+        }
+        // ── ③ Timeout + ④ Retry + ⑤ CircuitBreaker ─────────
         // Order: CB (outer) → Retry → Timeout → actual call
         /*包装顺序：核心 → 重试 → 熔断
           执行顺序：熔断 → 重试 → 核心 */
@@ -205,6 +215,20 @@ public class ToolGuardAspect {
             //  2. Resilience4j 自动将重试指标注册到 MeterRegistry
             //toolName 唯一标识retry实例
             return RetryRegistry.of(config).retry(toolName);
+        });
+    }
+
+    // ── 限流 ──────────────────────────────────────────────────────────
+
+    private RateLimiter getOrCreateRateLimiter(String toolName, ToolGuard guard) {
+        String key = guard.rateLimitKey().isBlank() ? toolName : toolName + ":" + guard.rateLimitKey();
+        return rateLimiters.computeIfAbsent(key, k -> {
+            RateLimiterConfig config = RateLimiterConfig.custom()
+                    .limitForPeriod((int) guard.rateLimit())
+                    .limitRefreshPeriod(Duration.ofMillis(guard.rateLimitPeriodMs()))
+                    .timeoutDuration(Duration.ofMillis(1)) // 不等待，超许可立即拒绝
+                    .build();
+            return io.github.resilience4j.ratelimiter.RateLimiterRegistry.of(config).rateLimiter(key);
         });
     }
 

@@ -53,11 +53,8 @@ public class PersistenceLoader {
                 continue;
             }
 
-            // 禁用检查
-            if (Boolean.FALSE.equals(e.getEnabled())) {
-                log.info("DB tool {} is disabled, skipping", e.getName());
-                continue;
-            }
+            // 禁用状态照常加载，由 invoke 拦截
+            boolean enabled = !Boolean.FALSE.equals(e.getEnabled());
 
             // 重建 Handler
             ToolHandler handler = buildHandler(e);
@@ -68,6 +65,10 @@ public class PersistenceLoader {
 
             java.util.Map<String, Object> extra = parseExtra(e.getExtra());
             extra.put("source", "ADMIN");
+            if (extra.get("releaseChannel") == null) {
+                extra.put("releaseChannel",
+                        e.getReleaseChannel() != null ? e.getReleaseChannel() : "stable");
+            }
 
             ToolMetadata meta = new ToolMetadata(
                     e.getName(),
@@ -77,10 +78,12 @@ public class PersistenceLoader {
                     RunnerType.valueOf(e.getRunnerType()),
                     e.getTarget(),
                     tags,
-                    extra
+                    extra,
+                    enabled
             );
 
-            registry.register(e.getName(), handler, meta);
+            int canaryW = e.getCanaryWeight() != null ? e.getCanaryWeight() : 0;
+            registry.register(e.getName(), handler, meta, canaryW);
             restored++;
             log.info("Restored from DB: name={}, runnerType={}", e.getName(), e.getRunnerType());
         }

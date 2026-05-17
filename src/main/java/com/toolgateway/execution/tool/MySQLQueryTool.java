@@ -24,7 +24,11 @@ import java.util.*;
     version     = "1.0.0",
     description = "Execute read-only SQL queries against the primary database",
     runnerType  = RunnerType.LOCAL,
-    tags        = {"database", "sql", "read"}
+    tags        = {"database", "sql", "read"},
+    params      = {
+        @Tool.Param(name = "sql", type = "string", required = true,
+                    description = "SELECT / SHOW / DESCRIBE 语句")
+    }
 )
 @ToolGuard(
     roles      = {"admin", "operator", "analyst"},

@@ -43,6 +43,17 @@ gateway:
       timeout: 15s
       tags: [mcp, external]
 
+  health-check:
+    enabled: true
+    interval: 30s
+    failure-threshold: 3   # 连续 3 次失败后自动禁用
+    ping-timeout: 5s
+
+# ── gRPC server ─────────────────────────────────────────────────
+grpc:
+  server:
+    port: 9090
+
 # ── Resilience4j ─────────────────────────────────────────────────
 resilience4j:
   circuitbreaker:

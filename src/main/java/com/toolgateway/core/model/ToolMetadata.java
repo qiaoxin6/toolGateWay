@@ -30,7 +30,10 @@ public record ToolMetadata(
     List<String> tags,
 
     /** 扩展配置：认证角色、超时覆写、自定义字段等 */
-    Map<String, Object> extra
+    Map<String, Object> extra,
+
+    /** 是否启用，默认 true。false 时调用会直接拒绝 */
+    boolean enabled
 ) {
 
     /**

@@ -47,6 +47,9 @@ public class McpAdapter implements ProtocolAdapter {
         if (params.has("role")) {
             context.put("role", params.get("role").asText());
         }
+        if (params.has("canary")) {
+            context.put("canary", params.get("canary").asText());
+        }
 
         return new ToolRequest(toolName, toolArgs, rpcId, context);
     }

@@ -7,6 +7,7 @@ import com.toolgateway.core.model.RunnerType;
 import com.toolgateway.core.model.ToolMetadata;
 import com.toolgateway.core.model.ToolResponse;
 import com.toolgateway.core.registry.ToolRegistry;
+import com.toolgateway.core.router.VersionedHandler;
 import com.toolgateway.execution.proxy.HttpProxyToolHandler;
 import com.toolgateway.execution.proxy.McpClientToolHandler;
 import com.toolgateway.guard.aspect.ToolGuardAspect;
@@ -40,6 +41,9 @@ public class AdminController {
     private ToolGuardAspect guardAspect;
 
     @Autowired
+    private com.toolgateway.guard.HealthChecker healthChecker;
+
+    @Autowired
     private MeterRegistry meterRegistry;
 
     @Autowired
@@ -63,15 +67,6 @@ public class AdminController {
             return ToolResponse.fail(ErrorCode.PARAM_INVALID.code, "name is required");
         }
 
-        ToolMetadata existing = null;
-        try {
-            existing = registry.getMeta(name);
-        } catch (ToolRegistry.ToolNotFoundException ignored) {
-        }
-        if (existing != null) {
-            return ToolResponse.fail(ErrorCode.PARAM_INVALID.code, "tool already exists: " + name);
-        }
-
         String url = (String) body.get("url");
         if (url == null || url.isBlank()) {
             return ToolResponse.fail(ErrorCode.PARAM_INVALID.code, "url is required");
@@ -90,6 +85,19 @@ public class AdminController {
         long timeoutMs = body.containsKey("timeoutMs")
                 ? ((Number) body.get("timeoutMs")).longValue() : 30_000L;
 
+        String releaseChannel = (String) body.getOrDefault("releaseChannel", "stable");
+        int canaryWeight = body.containsKey("canaryWeight")
+                ? ((Number) body.get("canaryWeight")).intValue() : 0;
+
+        // 检查同名同通道是否已存在
+        for (var vh : registry.getVersions(name)) {
+            String existingChannel = (String) vh.meta().extra()
+                    .getOrDefault("releaseChannel", "stable");
+            if (releaseChannel.equals(existingChannel)) {
+                return ToolResponse.fail(ErrorCode.PARAM_INVALID.code,
+                        "tool already exists: " + name + " in channel " + releaseChannel);
+            }
+        }
         @SuppressWarnings("unchecked")
         List<String> tags = body.containsKey("tags")
                 ? (List<String>) body.get("tags") : Collections.emptyList();
@@ -113,13 +121,20 @@ public class AdminController {
             log.info("Admin: registered HTTP sidecar tool: name={}, url={}", name, url);
         }
 
+        Map<String, Object> extra = new java.util.HashMap<>();
+        extra.put("source", "ADMIN");
+        extra.put("releaseChannel", releaseChannel);
+        String routeRule = (String) body.get("routeRule");
+        if (routeRule != null && !routeRule.isBlank()) {
+            extra.put("routeRule", routeRule);
+        }
+
         ToolMetadata meta = new ToolMetadata(
                 name, "1.0.0", description, Collections.emptyList(),
-                type, target, tags,
-                Collections.singletonMap("source", "ADMIN")
+                type, target, tags, extra, true
         );
 
-        registry.register(name, handler, meta);
+        registry.register(name, handler, meta, canaryWeight);
 
         // 持久化到 DB
         ToolRegistryEntity entity = new ToolRegistryEntity();
@@ -130,6 +145,11 @@ public class AdminController {
         entity.setRunnerType(type.name());
         entity.setTarget(target);
         entity.setTimeoutMs(timeoutMs);
+        entity.setReleaseChannel(releaseChannel);
+        entity.setCanaryWeight(canaryWeight);
+        if (routeRule != null && !routeRule.isBlank()) {
+            entity.setRouteRule(routeRule);
+        }
         try {
             entity.setTags(objectMapper.writeValueAsString(tags));
         } catch (Exception e) {
@@ -141,6 +161,27 @@ public class AdminController {
         return ToolResponse.success(Map.of("name", name, "url", url, "type", type.name()), 0);
     }
 
+    // ── 启用/禁用 ──────────────────────────────────────────────────────
+
+    /**
+     * 启用或禁用工具。适用于所有来源（CODE/YAML/ADMIN）。
+     * Body: {"enabled": true} 或 {"enabled": false}
+     */
+    @PatchMapping("/tools/{name}")
+    public ToolResponse<?> toggleEnabled(@PathVariable String name,
+                                         @RequestBody Map<String, Object> body) {
+        boolean enabled = body.containsKey("enabled") && (Boolean) body.get("enabled");
+
+        // 同步 DB（仅 ADMIN 来源有效，CODE/YAML 忽略）
+        ToolMetadata meta = registry.getMeta(name);
+        if ("ADMIN".equals(meta.extra().get("source"))) {
+            repository.updateEnabled(name, enabled);
+        }
+
+        registry.setEnabled(name, enabled);
+        return ToolResponse.success(Map.of("name", name, "enabled", enabled), 0);
+    }
+
     // ── 删除 ────────────────────────────────────────────────────────────
 
     /**
@@ -148,21 +189,67 @@ public class AdminController {
      */
     @DeleteMapping("/tools/{name}")
     public ToolResponse<?> deleteTool(@PathVariable String name) {
-        ToolMetadata meta = registry.getMeta(name);
+        List<VersionedHandler> versions = registry.getVersions(name);
+        if (versions.isEmpty()) {
+            return ToolResponse.fail(ErrorCode.TOOL_NOT_FOUND.code, "tool not found: " + name);
+        }
 
-        if (meta.runnerType() != RunnerType.HTTP_SIDECAR
-                && meta.runnerType() != RunnerType.MCP_NATIVE) {
-            return ToolResponse.fail(ErrorCode.PARAM_INVALID.code,
-                    "can only delete external proxy tools, not " + meta.runnerType());
+        // 检查：全部版本都必须是外部代理类型
+        for (var vh : versions) {
+            RunnerType type = vh.meta().runnerType();
+            if (type != RunnerType.HTTP_SIDECAR && type != RunnerType.MCP_NATIVE) {
+                return ToolResponse.fail(ErrorCode.PARAM_INVALID.code,
+                        "cannot delete: " + name + " contains " + type + " version");
+            }
         }
 
         registry.unregister(name);
 
-        // 从 DB 删除
+        // 从 DB 删除所有版本
         repository.deleteByName(name);
 
-        log.info("Admin: deleted tool: name={}", name);
+        log.info("Admin: deleted tool: name={}, versions={}", name, versions.size());
         return ToolResponse.success(Map.of("name", name, "deleted", true), 0);
+    }
+
+    /** 删除指定通道的版本。 */
+    @DeleteMapping("/tools/{name}/{channel}")
+    public ToolResponse<?> deleteToolChannel(@PathVariable String name,
+                                              @PathVariable String channel) {
+        List<VersionedHandler> versions = registry.getVersions(name);
+        if (versions.isEmpty()) {
+            return ToolResponse.fail(ErrorCode.TOOL_NOT_FOUND.code, "tool not found: " + name);
+        }
+
+        // 检查是否CODE来源
+        for (var vh : versions) {
+            String ch = (String) vh.meta().extra().getOrDefault("releaseChannel", "stable");
+            if (ch.equals(channel)) {
+                String source = (String) vh.meta().extra().getOrDefault("source", "");
+                if ("CODE".equals(source)) {
+                    return ToolResponse.fail(ErrorCode.PARAM_INVALID.code,
+                            "cannot delete CODE-source channels");
+                }
+            }
+        }
+
+        // 从列表中移除该通道
+        boolean removed = versions.removeIf(vh -> {
+            String ch = (String) vh.meta().extra().getOrDefault("releaseChannel", "stable");
+            return ch.equals(channel);
+        });
+        if (!removed) {
+            return ToolResponse.fail(ErrorCode.TOOL_NOT_FOUND.code,
+                    "channel not found: " + name + "/" + channel);
+        }
+
+        // 如果所有版本都删了，清理 name
+        if (versions.isEmpty()) {
+            registry.unregister(name);
+        }
+
+        log.info("Admin: deleted channel: name={}, channel={}", name, channel);
+        return ToolResponse.success(Map.of("name", name, "channel", channel, "deleted", true), 0);
     }
 
     // ── 状态聚合 ────────────────────────────────────────────────────────
@@ -192,12 +279,33 @@ public class AdminController {
             info.put("description", meta.description());
             info.put("target", meta.target());
             info.put("tags", meta.tags());
+            info.put("enabled", meta.enabled());
+
+            // 灰度信息
+            info.put("releaseChannel",
+                    meta.extra().getOrDefault("releaseChannel", "stable"));
+
+            // 健康状态
+            var health = healthChecker.getHealthMap().get(meta.name());
+            info.put("healthy", health != null ? health.healthy : true);
+
+            // 所有版本
+            List<Map<String, Object>> verList = new ArrayList<>();
+            for (var vh : registry.getVersions(meta.name())) {
+                verList.add(Map.of(
+                        "version", vh.meta().version(),
+                        "channel", vh.meta().extra().getOrDefault("releaseChannel", "stable"),
+                        "canaryWeight", vh.canaryWeight(),
+                        "enabled", vh.meta().enabled()
+                ));
+            }
+            info.put("versions", verList);
 
             // 熔断器状态
             var cb = cbDetails.getOrDefault(meta.name(), Map.of());
             info.put("circuitBreaker", cb);
 
-            // 调用统计（从 Micrometer 读取）
+            // 调用统计
             info.put("stats", Map.of(
                     "callCount", getCounter("tool.invoke.count", "tool", meta.name()),
                     "errorCount", getCounter("tool.error.count", "tool", meta.name()),

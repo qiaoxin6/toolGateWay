@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package toolgateway;
+
+option java_package = "com.toolgateway.grpc";
+option java_multiple_files = false;
+
+// ── Tool Gateway gRPC Service ───────────────────────────────────
+
+service ToolGatewayService {
+  // 列出所有已注册工具
+  rpc ListTools (ListToolsRequest) returns (ListToolsResponse);
+  // 调用指定工具
+  rpc CallTool (CallToolRequest) returns (CallToolResponse);
+}
+
+// ── ListTools ───────────────────────────────────────────────────
+
+message ListToolsRequest {
+  string keyword = 1;   // 可选，模糊搜索
+  repeated string tags = 2;
+}
+
+message ToolInfo {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  string runner_type = 4;
+  string target = 5;
+  repeated string tags = 6;
+  string release_channel = 7;
+  bool enabled = 8;
+}
+
+message ListToolsResponse {
+  repeated ToolInfo tools = 1;
+  int32 total = 2;
+}
+
+// ── CallTool ────────────────────────────────────────────────────
+
+message CallToolRequest {
+  string tool_name = 1;
+  string params_json = 2;           // JSON string，保持通用性
+  string trace_id = 3;
+  map<string, string> context = 4;  // tenant, role, canary 等
+}
+
+message CallToolResponse {
+  bool success = 1;
+  string data_json = 2;             // JSON result
+  string error_code = 3;
+  string error_msg = 4;
+  int64 cost_ms = 5;
+}

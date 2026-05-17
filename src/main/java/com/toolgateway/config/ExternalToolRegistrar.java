@@ -14,6 +14,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 启动时读取 gateway.external-tools 配置，
@@ -62,6 +64,13 @@ public class ExternalToolRegistrar {
                 log.info("HTTP sidecar tool registered: name={}, url={}", cfg.getName(), cfg.getUrl());
             }
 
+            Map<String, Object> extra = new HashMap<>();
+            extra.put("source", "YAML");
+            extra.put("releaseChannel", cfg.getReleaseChannel());
+            if (cfg.getRouteRule() != null && !cfg.getRouteRule().isBlank()) {
+                extra.put("routeRule", cfg.getRouteRule());
+            }
+
             ToolMetadata meta = new ToolMetadata(
                     cfg.getName(),
                     "1.0.0",
@@ -70,10 +79,11 @@ public class ExternalToolRegistrar {
                     cfg.getType(),
                     target,
                     cfg.getTags(),
-                    Collections.singletonMap("source", "YAML")
+                    extra,
+                    true
             );
 
-            registry.register(cfg.getName(), handler, meta);
+            registry.register(cfg.getName(), handler, meta, cfg.getCanaryWeight());
         }
     }
 }

@@ -125,38 +125,50 @@
                 <div class="table-wrap">
                 <table class="tool-table">
                     <colgroup>
-                        <col style="width:15%">
-                        <col style="width:11%">
+                        <col style="width:12%">
+                        <col style="width:8%">
+                        <col style="width:6%">
+                        <col style="width:7%">
+                        <col style="width:12%">
+                        <col style="width:8%">
+                        <col style="width:6%">
+                        <col style="width:6%">
+                        <col style="width:13%">
+                        <col style="width:14%">
+                        <col style="width:6%">
+                        <col style="width:5%">
+                        <col style="width:6%">
                         <col style="width:7%">
                         <col style="width:17%">
-                        <col style="width:20%">
-                        <col style="width:9%">
-                        <col style="width:8%">
-                        <col style="width:13%">
                     </colgroup>
                     <thead>
                         <tr>
                             <th>名称</th>
                             <th>类型</th>
                             <th>版本</th>
+                            <th>通道</th>
                             <th>描述</th>
                             <th>目标地址</th>
-                            <th class="c">熔断器</th>
-                            <th class="c">调用次数</th>
+                            <th class="c">熔断</th>
+                            <th class="c">健康</th>
+                            <th class="c">状态</th>
+                            <th class="c">调用</th>
                             <th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-if="filteredTools.length === 0">
-                            <td colspan="8" class="empty">暂无已注册工具</td>
+                            <td colspan="11" class="empty">暂无已注册工具</td>
                         </tr>
-                        <tr v-for="t in filteredTools" :key="t.name">
+                        <tr v-for="t in filteredTools" :key="t.name + (t.releaseChannel || '')"
+                            :style="{ opacity: t.enabled ? 1 : 0.45 }">
                             <td><strong>{{ t.name }}</strong></td>
                             <td><span :class="'tag ' + typeCss(t.runnerType)">{{ t.runnerType }}</span></td>
                             <td>{{ t.version }}</td>
-                            <td :title="t.description">{{ ellipsis(t.description, 30) }}</td>
+                            <td><span :class="'tag ' + channelCss(t)">{{ t.releaseChannel || 'stable' }}</span></td>
+                            <td :title="t.description">{{ ellipsis(t.description, 23) }}</td>
                             <td :title="t.target">
-                                <span v-if="t.target">{{ ellipsis(t.target, 40) }}</span>
+                                <span v-if="t.target">{{ ellipsis(t.target, 30) }}</span>
                                 <span v-else class="no-target">—</span>
                             </td>
                             <td class="c">
@@ -164,8 +176,22 @@
                                     {{ cbOpen(t) ? '● 打开' : '● 正常' }}
                                 </span>
                             </td>
+                            <td class="c">
+                                <span v-if="isExternal(t)"
+                                      :style="{ color: t.healthy ? '#52c41a' : '#ff4d4f' }">
+                                    {{ t.healthy ? '●' : '○' }}
+                                </span>
+                                <span v-else style="color:#ccc;">—</span>
+                            </td>
+                            <td class="c">
+                                <span v-if="t.enabled" style="color:#52c41a;">启用</span>
+                                <span v-else style="color:#ff4d4f;">禁用</span>
+                            </td>
                             <td class="c">{{ t.stats?.callCount || 0 }}</td>
                             <td>
+                                <button class="link-btn" @click="toggleEnabled(t)">
+                                    {{ t.enabled ? '禁用' : '启用' }}
+                                </button>
                                 <button class="link-btn" @click="showDetail(t)">详情</button>
                                 <button v-if="isExternal(t)"
                                         class="link-btn danger" @click="confirmDelete(t)">删除</button>
@@ -214,6 +240,23 @@
                 <el-input v-model="addForm.remoteToolName"
                           placeholder="外部 MCP Server 上注册的工具名" />
             </el-form-item>
+            <el-row :gutter="12">
+                <el-col :span="12">
+                    <el-form-item label="发布通道">
+                        <el-select v-model="addForm.releaseChannel" style="width:100%">
+                            <el-option label="stable（稳定版）" value="stable" />
+                            <el-option label="canary（金丝雀）" value="canary" />
+                            <el-option label="beta（内测）" value="beta" />
+                        </el-select>
+                    </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                    <el-form-item label="灰度权重(0-100)">
+                        <el-input-number v-model="addForm.canaryWeight"
+                                         :min="0" :max="100" style="width:100%" />
+                    </el-form-item>
+                </el-col>
+            </el-row>
             <el-form-item label="超时（毫秒）">
                 <el-input-number v-model="addForm.timeoutMs" :min="100" :max="300000"
                                  :step="1000" style="width: 100%" />
@@ -266,7 +309,8 @@ createApp({
 
         const addForm = ref({
             type: 'HTTP_SIDECAR', name: '', description: '', url: '',
-            remoteToolName: '', timeoutMs: 30000, tagsStr: ''
+            remoteToolName: '', timeoutMs: 30000, tagsStr: '',
+            releaseChannel: 'stable', canaryWeight: 0
         });
 
         const filteredTools = computed(() => {
@@ -309,7 +353,9 @@ createApp({
                     description: f.description,
                     url: f.url,
                     timeoutMs: f.timeoutMs,
-                    tags
+                    tags,
+                    releaseChannel: f.releaseChannel,
+                    canaryWeight: f.canaryWeight
                 };
                 if (f.type === 'MCP_NATIVE') {
                     body.remoteToolName = f.remoteToolName;
@@ -325,7 +371,8 @@ createApp({
                     showAddDialog.value = false;
                     addForm.value = { type: 'HTTP_SIDECAR', name: '',
                         description: '', url: '', remoteToolName: '',
-                        timeoutMs: 30000, tagsStr: '' };
+                        timeoutMs: 30000, tagsStr: '',
+                        releaseChannel: 'stable', canaryWeight: 0 };
                     await fetchStatus();
                 } else {
                     ElementPlus.ElMessage.error(data.error_msg || '添加失败');
@@ -343,6 +390,26 @@ createApp({
                 '确认删除',
                 { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
             ).then(() => doDelete(tool.name)).catch(() => {});
+        }
+
+        async function toggleEnabled(tool) {
+            const newVal = !tool.enabled;
+            try {
+                const res = await fetch('/api/admin/tools/' + tool.name, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: newVal })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    ElementPlus.ElMessage.success(newVal ? '已启用' : '已禁用');
+                    await fetchStatus();
+                } else {
+                    ElementPlus.ElMessage.error(data.error_msg || '操作失败');
+                }
+            } catch (e) {
+                ElementPlus.ElMessage.error('请求失败');
+            }
         }
 
         async function doDelete(name) {
@@ -438,6 +505,13 @@ createApp({
             return m[type] || 'local';
         }
 
+        function channelCss(tool) {
+            const ch = tool.releaseChannel || 'stable';
+            if (ch === 'canary') return 'http';
+            if (ch === 'beta') return 'warning';
+            return 'local';
+        }
+
         function ellipsis(str, max) {
             if (!str) return '';
             return str.length > max ? str.slice(0, max) + '…' : str;
@@ -481,8 +555,8 @@ createApp({
             activeTab, keyword, refreshInterval, loading,
             showAddDialog, showDetailDialog, detailTool, addLoading,
             status, addForm, filteredTools,
-            fetchStatus, addTool, confirmDelete, doDelete, showDetail,
-            typeCss, ellipsis, fmtCount, isExternal, cbOpen, cbStateText
+            fetchStatus, addTool, confirmDelete, toggleEnabled, doDelete, showDetail,
+            typeCss, channelCss, ellipsis, fmtCount, isExternal, cbOpen, cbStateText
         };
     }
 }).use(ElementPlus).mount('#app');

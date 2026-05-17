@@ -52,6 +52,17 @@ public class ExternalToolProperties {
         /** 标签列表 */
         private List<String> tags = new ArrayList<>();
 
+        /** 发布通道 stable/canary/beta，默认 stable */
+        private String releaseChannel = "stable";
+
+        /** 灰度权重 0-100，仅 canary/beta 通道生效 */
+        private int canaryWeight = 0;
+
+        /**
+         * 灰度路由规则 JSON，格式如 {"tenants":["t-a"],"headers":{"x-env":"staging"}}
+         */
+        private String routeRule;
+
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
 
@@ -72,5 +83,14 @@ public class ExternalToolProperties {
 
         public List<String> getTags() { return tags; }
         public void setTags(List<String> tags) { this.tags = tags; }
+
+        public String getReleaseChannel() { return releaseChannel; }
+        public void setReleaseChannel(String releaseChannel) { this.releaseChannel = releaseChannel; }
+
+        public int getCanaryWeight() { return canaryWeight; }
+        public void setCanaryWeight(int canaryWeight) { this.canaryWeight = canaryWeight; }
+
+        public String getRouteRule() { return routeRule; }
+        public void setRouteRule(String routeRule) { this.routeRule = routeRule; }
     }
 }

@@ -27,4 +27,10 @@ public @interface ToolGuard {
 
     /** Fallback method name on the same class */
     String fallback() default "";
+    // 周期内允许次数，0=不限
+    long rateLimit() default 0;
+    // 周期时长
+    long rateLimitPeriodMs() default 1000; // 1s
+    // 限流维度（空=tool级别, "tenant"/"caller"）
+    String rateLimitKey() default ""; 
 }
