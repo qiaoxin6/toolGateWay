@@ -60,7 +60,10 @@
       "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS clean_test\"}}')",
       "Bash(curl -s -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS stable_only\"}}')",
       "Bash(mvn generate-sources *)",
-      "Bash(python3 -c \"import sys,json; [print\\(f'{t[\\\\\"name\\\\\"]}: enabled={t[\\\\\"enabled\\\\\"]} healthy={t[\\\\\"healthy\\\\\"]}'\\) for t in json.load\\(sys.stdin\\)]\")"
+      "Bash(python3 -c \"import sys,json; [print\\(f'{t[\\\\\"name\\\\\"]}: enabled={t[\\\\\"enabled\\\\\"]} healthy={t[\\\\\"healthy\\\\\"]}'\\) for t in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s -I -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS trace_test\"}}')",
+      "Bash(curl -s -D - -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Trace-Id: my-trace-001\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 1 AS val\"}}')",
+      "Bash(curl -s -D - -X POST http://localhost:8080/api/tools/mysql_query -H \"Content-Type: application/json\" -H \"X-Role: admin\" -d '{\"params\":{\"sql\":\"SELECT 2\"}}')"
     ]
   }
 }

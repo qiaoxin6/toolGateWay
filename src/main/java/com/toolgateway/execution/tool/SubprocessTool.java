@@ -16,10 +16,10 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Generic subprocess runner: invokes any external script (Python, Node, Shell...)
- * by spawning a child process. stdin → ToolRequest params, stdout → ToolResponse.
+ * 通用子进程运行器：通过生成子进程调用任意外部脚本（Python、Node、Shell...）。
+ * 标准输入 ← ToolRequest 参数，标准输出 → ToolResponse。
  *
- * The script path is specified via the @Tool's target field.
+ * 脚本路径通过 @Tool 的 target 字段指定。
  */
 @Component
 @Tool(

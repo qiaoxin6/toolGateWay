@@ -36,15 +36,16 @@
         .table-wrap { overflow-x: auto; background: #fff; border-radius: 8px;
                       box-shadow: 0 1px 3px rgba(0,0,0,.06); }
         table.tool-table { width: 100%; border-collapse: collapse; font-size: 14px;
-                           min-width: 960px; }
-        table.tool-table thead { background: #fafafa; }
+                           min-width: 960px; border: 1px solid #d0d0d0; }
+        table.tool-table thead { background: #f5f6f8; }
         table.tool-table th { padding: 12px 10px; text-align: left; font-weight: 600;
-                              color: #333; border-bottom: 2px solid #e8e8e8;
+                              color: #333; border: 1px solid #d0d0d0;
                               white-space: nowrap; }
         table.tool-table th.c { text-align: center; }
-        table.tool-table td { padding: 10px; border-bottom: 1px solid #f0f0f0;
+        table.tool-table td { padding: 10px; border: 1px solid #e0e0e0;
                               color: #444; }
-        table.tool-table tr:hover td { background: #f5f7fa; }
+        table.tool-table tbody tr:nth-child(even) td { background: #fafbfc; }
+        table.tool-table tr:hover td { background: #eef2f7; }
         table.tool-table td.empty { text-align: center; color: #999; padding: 40px; }
         .tag { display: inline-block; padding: 2px 8px; border-radius: 4px;
                font-size: 12px; color: #fff; }
@@ -107,18 +108,18 @@
             <el-tab-pane label="工具管理" name="tools">
 
                 <!-- 工具栏 -->
-                <div class="toolbar">
+                <div style="margin-bottom:16px;">
                     <el-input v-model="keyword" placeholder="搜索工具名称"
-                              style="width: 240px" clearable size="default" />
-                    <el-button type="primary" @click="showAddDialog = true">
+                              style="width:220px; margin-right:10px;" clearable size="default" />
+                    <el-button type="primary" @click="showAddDialog = true"
+                               style="margin-right:30px;">
                         + 添加工具
                     </el-button>
-                    <span class="spacer"></span>
-                    <span class="auto-label">自动刷新间隔</span>
+                    <span style="color:#666; font-size:13px;">自动刷新间隔</span>
                     <el-input-number v-model="refreshInterval" :min="1" :max="300"
-                                     :step="1" size="default" style="width: 100px" />
-                    <span class="auto-label">秒</span>
-                    <el-button @click="fetchStatus" size="default">立即刷新</el-button>
+                                     :step="1" size="default" style="width:90px; margin:0 6px;" />
+                    <span style="color:#666; font-size:13px;">秒</span>
+                    <el-button @click="fetchStatus" size="default" style="margin-left:10px;">立即刷新</el-button>
                 </div>
 
                 <!-- 表格 —— 标准 HTML table，列宽稳定不会塌缩 -->
@@ -129,17 +130,13 @@
                         <col style="width:8%">
                         <col style="width:6%">
                         <col style="width:7%">
-                        <col style="width:12%">
-                        <col style="width:8%">
-                        <col style="width:6%">
-                        <col style="width:6%">
                         <col style="width:13%">
-                        <col style="width:14%">
+                        <col style="width:16%">
                         <col style="width:6%">
                         <col style="width:5%">
                         <col style="width:6%">
                         <col style="width:7%">
-                        <col style="width:17%">
+                        <col style="width:14%">
                     </colgroup>
                     <thead>
                         <tr>

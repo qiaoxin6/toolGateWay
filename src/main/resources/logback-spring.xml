@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- MDC 默认值 -->
+    <property scope="context" name="defaultServiceName" value="tool-gateway" />
+
+    <!-- ── 控制台 Appender（开发环境，人类可读） ─────────────── -->
+    <springProfile name="default,dev">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] [%X{traceId:-no-trace}] %cyan(%logger{15}) - %msg%n</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE" />
+        </root>
+    </springProfile>
+
+    <!-- ── JSON 文件 Appender（生产环境，可被 ELK/Loki 采集） ── -->
+    <springProfile name="prod">
+        <appender name="JSON-FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>logs/tool-gateway.json</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>logs/tool-gateway.%d{yyyy-MM-dd}.%i.json.gz</fileNamePattern>
+                <maxFileSize>100MB</maxFileSize>
+                <maxHistory>7</maxHistory>
+            </rollingPolicy>
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+                <includeMdcKeyName>toolName</includeMdcKeyName>
+                <includeMdcKeyName>action</includeMdcKeyName>
+                <customFields>{"service":"tool-gateway"}</customFields>
+            </encoder>
+        </appender>
+
+        <!-- 控制台也保留 JSON 格式（容器环境 stdout 采集） -->
+        <appender name="CONSOLE-JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+                <includeMdcKeyName>toolName</includeMdcKeyName>
+                <includeMdcKeyName>action</includeMdcKeyName>
+                <customFields>{"service":"tool-gateway"}</customFields>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE-JSON" />
+            <appender-ref ref="JSON-FILE" />
+        </root>
+    </springProfile>
+
+    <!-- ── 第三方库日志级别 ─────────────────────────────────── -->
+    <logger name="com.toolgateway" level="DEBUG" />
+    <logger name="io.github.resilience4j" level="INFO" />
+    <logger name="io.grpc" level="WARN" />
+    <logger name="org.mybatis" level="WARN" />
+</configuration>

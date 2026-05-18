@@ -18,6 +18,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.annotation.AnnotationUtils;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -131,6 +132,8 @@ public class ToolRegistry {
     // ── Invocation ─────────────────────────────────────────────────────
 
     public ToolResponse<?> invoke(String toolName, ToolRequest request) {
+        MDC.put("toolName", toolName);
+        try {
         List<VersionedHandler> versions = handlers.get(toolName);
         if (versions == null || versions.isEmpty()) {
             return ToolResponse.fail(ErrorCode.TOOL_NOT_FOUND.code,
@@ -171,6 +174,9 @@ public class ToolRegistry {
                     "error", resp.errorCode()).increment();
         }
         return resp;
+        } finally {
+            MDC.remove("toolName");
+        }
     }
 
     // ── Auto-registration on startup ───────────────────────────────────
